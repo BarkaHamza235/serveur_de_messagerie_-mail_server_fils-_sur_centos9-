@@ -1,0 +1,80 @@
+----installation forcée avant de continuer et nginx,mariadb,dhcp fonctionnent
+yum install nginx mariadb-server mariadb php php-fpm php-mysqlnd php-gd php-xml php-mbstring php-json
+
+----installer roundcube
+dnf install epel-release
+dnf install roundcubemail
+
+-----base de donnée
+CREATE DATABASE roundcube;
+
+CREATE USER roundcube@'localhost' IDENTIFIED BY 'mot_de_passe';
+
+ GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost';
+
+ FLUSH PRIVILEGES;
+
+ exit;
+
+----les permissions
+chown -R nginx:nginx /usr/share/roundcubemail
+chown -R nginx:nginx /etc/roundcubemail
+chown -R nginx:nginx /var/log/roundcubemail
+chown -R nginx:nginx /var/lib/php/session
+
+----cp et vim
+cd /etc/roundcubemail ....php.sample   ....php(meme nom du fichier copié mais sans .sample)
+vim ...php(fichier copié)
+{ligne 28 (mysql base de donnée créer,user,password...);  ligne 32(config[default-host]=srv.hamza.td et a la fin roundcubemail just par roundcube; ligne 36(config[smtp-host]=srv.hamza.td:25 ) au lieu localhost c'est srv.hamza.td et srv.hamza.td:25
+
+}
+
+-----aller dans /etc/nginx/conf.d/ et creer un fichier .conf par exemple roundcube.conf et ecrire les lignes ci-dessous(server {...}) dans roundcube.conf crée 
+server {
+
+        listen       443 ssl http2;
+        server_name  hamza.td;
+        root         /usr/share/roundcubemail;
+        index index.php index.html;
+        ssl_certificate "/etc/pki/tls/certs/server.crt";
+        ssl_certificate_key "/etc/pki/tls/certs/server.key";
+
+        location / {
+                try_files $uri /index.php$is_args$args;
+        }
+
+        location ~ ^/index\.php$ {
+                fastcgi_pass unix:/run/php-fpm/www.sock;
+                fastcgi_split_path_info ^(.+\.php)(/.*)$;
+                include fastcgi_params;
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                fastcgi_index index.php;
+      }
+
+ }
+
+
+----en suite, aller dans /etc/nginx/nginx.conf et commenter les lignes de http et https
+
+----ajout de permissions du /var/lib/php/session
+ls -l
+chown nginx:nginx /etc/roundcubemail/....php(crée deja precedement sans .sample la)
+ls -l
+
+----deplacer et initialiser
+cd /usr/share/roundcubemail/SQL {NB le dossier SQL en majuscule}
+mysql -u root roundcube -p < mysql.initial.sql
+
+
+---editer le fichier /etc/php-fpm.d/www.conf
+{lignes 24|26 user = nginx | groupe = nginx} au lieu de apache
+
+---modifier /etc/php.ini
+{ligne 1234 session.save_path = /var/lib/php/session  et decomenter la ligne 807 cgi.fix_path.info=1}
+
+
+---redemarrer les services named, php-fpm, nginx, dhcpd, postfix, dovecot, mariadb
+---verifier le nginx avec nginx -t
+
+----aller dans le navigateur pour tester
+https://www.hamza.td/roundcubemail
